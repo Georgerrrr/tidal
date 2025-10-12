@@ -1,0 +1,11 @@
+*.EXE
+*.exe
+*.OBJ 
+*.OBJ
+*.o
+!RES/*.OBJ
+!RES/*.obj
+*.LNK
+*.MBR
+*.SMP
+.ccls
