@@ -1,22 +1,19 @@
-SRC_DIR  =./src/
-TEST_DIR =./test/
+SRC_DIR = ./SRC/
 
 CC=wcc386
 AS=tasm
 LD=wlink
 
-DEL=del
+model=c
 
-MODEL=c
-
-MESSAGE_DEBUG= Linking debug build
-MESSAGE_PRODUCTION= Linking production build
+MESSAGE_DEBUG = Building debug
+MESSAGE_PRODUCTION = Building production
 
 VERSION=DEBUG
 
 CDEBUG=-d3 -db
 CPRODUCTION=
-CFLAGS=$(C$(VERSION)) -i. 
+CFLAGS=$(C$(VERSION)) -i.
 
 ASMDEBUG=-Zi
 ASMPRODUCTION=
@@ -26,46 +23,35 @@ LDEBUG=debug all
 LPRODUCTION=
 LFLAGS=$(L$(VERSION))
 
-TIDE_OBJS = alloc.obj tlAssert.obj gfx.obj 
-TEST_OBJS = test.obj 
+TIDAL_OBJS=tlMain.obj tlGfx.obj tlAssert.obj tlAlloc.obj
 
-tide.lbc : $(TIDE_OBJS)
-		%create $^@ 
-    @for %i in ($(TIDE_OBJS)) do %append $^@ +%i
+TIDAL.EXE : $(TIDAL_OBJS) TIDAL.LNK
+	echo $(MESSAGE_$(VERSION))
+	$(LD) $(LFLAGS) @TIDAL.LNK
 
-tide.lib : $(TIDE_OBJS) tide.lbc
-		echo $(MESSAGE_$(VERSION))
-		wlib -n -q -b tide.lib @tide.lbc
-
-test.exe : $(TEST_OBJS) test.lnk 
-		echo $(MESSAGE_$(VERSION))
-		$(LD) $(LFLAGS) @test.lnk
-
-test.lnk : $(TEST_OBJS) tide.lib
-		%create $^@
-		%append $^@ NAME test.exe
-    %append $^@ SYSTEM DOS4G
-    %append $^@ OPTION QUIET
-    %append $^@ OPTION STACK=16k
-		%append $^@ LIBRARY tide.lib
-    @for %i in ($(TEST_OBJS)) do %append $^@ FILE %i
+TIDAL.LNK: $(TIDAL_OBJS)
+	%create $^@
+	%append $^@ NAME TIDAL.EXE
+	%append $^@ SYSTEM DOS4G
+	%append $^@ OPTION QUIET
+	%append $^@ OPTION STACK=16k
+	@for %i in ($(TIDAL_OBJS)) do %append $^@ FILE %i
 
 .c.obj:
-		$(CC) $[* $(CFLAGS)
+	$(CC) $[* $(CFLAGS)
 
-.c: $(SRC_DIR);$(TEST_DIR)
+.c: $(SRC_DIR)
 
 .asm.obj:
-		$(AS) $[* $(AFLAGS)
+	$(CC) $[* $(AFLAGS)
 
-.asm: $(SRC_DIR);$(TEST_DIR)
-
-tidal: tide.lib
-test: test.exe
+.asm: $(SRC_DIR)
 
 clean: .symbolic
-		$(DEL) *.err
-    $(DEL) *.obj
-    $(DEL) *.mbr
-		$(DEL) *.lnk
+	del *.err
+	del *.obj
+	del *.EXE
+	del *.LNK
+
+build: TIDAL.EXE
 
