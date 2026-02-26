@@ -9,12 +9,12 @@
  Stack allocator
 */
 
-void alcInit(void* mem, size_t memsize);
+void tlaInit(void* mem, size_t memsize);
 
-void* alcMalloc(size_t size);
-void alcFree(void* ptr);
+void* tlaMalloc(size_t size);
+void tlaFree(void* ptr);
 
-void alcDump(FILE* out);
+void tlaDump(FILE* out);
 
 /*
  Recycle allocator
