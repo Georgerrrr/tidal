@@ -86,7 +86,7 @@ void tlaDump(FILE* out) {
 
 typedef struct RlaHeader {
 	struct RlaHeader *next;
-	unsigned long     size; /* bottom bit == 1 if free */
+	unsigned long     size; 
 } _rla_header;
 
 static _rla_header* rlaRoot;
@@ -94,52 +94,76 @@ static _rla_header* rlaRoot;
 void rlcInit(void* mem, size_t memsize) {
 	rlaRoot = (_rla_header*)mem;
 	rlaRoot->next = NULL;
-	rlaRoot->size = (memsize - sizeof(_rla_header)) | 0x1; /* mark as free */
+	rlaRoot->size = memsize; 
+
+  tlAssert(sizeof(_rla_header) <= RLC_PADDING, "RLC Allocator padding must be greater than size of free list header!");
 }
 
 void* rlcMalloc(size_t size) {
-	_rla_header* current;
+  _rla_header *prev, *next, *current;
+
 	size_t alignedSize;
 
-	alignedSize = (size & (~(RLC_PADDING-1))) + RLC_PADDING;
+	alignedSize = ((size + sizeof(_rla_header)) & (~(RLC_PADDING-1))) + RLC_PADDING;
 
 	current = rlaRoot;
+  prev    = NULL;
+
 	while (current != NULL) {
-		if ((current->size & 0x1) && (current->size >= alignedSize)) goto FOUND_VALID_RLA_SEGMENT;
+    if (current->size >= alignedSize) goto FOUND_VALID_RLC_SEGMENT;
+    prev    = current;
 		current = current->next;
 	}
-FOUND_VALID_RLA_SEGMENT:
-	if (NULL == current) return NULL;
-	current->next = (_rla_header*)((unsigned char*)current + sizeof(_rla_header) + alignedSize);
-	current->next->size = current->size - (sizeof(_rla_header) + alignedSize);
-	current->size = alignedSize;
+
+  return NULL;
+FOUND_VALID_RLC_SEGMENT:
+
+  if (current->size == alignedSize) { /* new alloc takes the whole space of the segment */
+    if (NULL != prev) prev->next = current->next;
+    else              rlaRoot    = current->next;
+
+    return current + 1;
+  }
+
+  next = (_rla_header*)((unsigned char*)current + alignedSize);
+  next->next = current->next;
+  next->size = current->size - alignedSize;
+
+  if (NULL != prev) prev->next = next;
+  else              rlaRoot    = next;
+
+  current->next = NULL;
+  current->size = alignedSize; 
 	return current + 1;
 }
 
 void rlcFree(void* ptr) {
 	_rla_header* segment;
-	_rla_header* current;
+  _rla_header *current, *prev;
 
 	segment = (_rla_header*)ptr - 1;
-	current = rlaRoot;
 
-	/* set the segment marked as free */
-	segment->size = (segment->size | 0x1);
+  current = rlaRoot;
+  prev    = NULL;
 
-	/* join with free block after, if it's free */
-	if (segment->next->size & 0x1) {
-		segment->size += (segment->next->size & (~1));
-		segment->next = segment->next->next;
-	}
+  while (NULL != current) {
+    if (current > segment) goto RLC_CONSOLIDATE;
+    prev = current;
+    current = current->next;
+  }
+RLC_CONSOLIDATE:
+  segment->next = current;
+  if (NULL == prev) rlaRoot = segment;
+  else              prev->next = segment;
+  
+  if ((NULL != segment->next) && ((_rla_header*)((unsigned char*)segment + segment->size) == segment->next)) {
+    segment->size += segment->next->size;
+    segment->next = segment->next->next;
+  }
 
-	/* join with free block before, requires stepping through list */
-	while (NULL != current) {
-		if ((current->size & 0x1) && (current->next->size & 0x1)) {
-			current->size += (current->next->size & (~1));
-			current->next = current->next->next;
-			return; /* can early return cuz if this is done on every free
-				   then there should only be at most one pair of free
-				   blocks next to each other */
-		}
-	}
+  if (NULL == prev) return;
+  if ((_rla_header*)((unsigned char*)prev + prev->size) == segment) {
+    prev->size += segment->size;
+    prev->next = segment->next;
+  }
 }
