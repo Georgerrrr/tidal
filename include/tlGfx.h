@@ -4,52 +4,42 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-typedef struct {
-  unsigned char* TexBuffer;
-  unsigned short* DepthBuffer;
+#include "include/tlMaths.h"
 
-  uint8_t TexBufferW;
-  uint8_t DepthBufferW;
-
-  uint8_t TexBufferS;
-  uint8_t DepthBufferS;
-} _background_set_configure;
+#define GFX_TRIS              0x01 
+#define GFX_QUADS             0x02 
+#define GFX_TEXTURED          0x10 
+#define GFX_COLOURED          0x20
 
 typedef struct {
-  unsigned char* Buffer;
-  uint32_t BufferSize;
-} _buffer;
+  unsigned int vertsLength;
+  unsigned int indiciesLen;
 
-typedef struct {
-  _buffer Raster;
-  int16_t X,
-          Y,
-          W,
-          H;
-} _raster_draw_configure;
-
-typedef struct {
-  float X,
-        Y,
-        Z;
-} _coordinate;
-
-typedef struct {
-  float* Verts;
-  uint32_t* Indicies;
-  _buffer Texure;
-  _coordinate Position;
-  _coordinate Scale;
-  _coordinate Rotation;
-  unsigned char Flags;
-} _geometry_draw_configure;
+  fvec4_t* verts;
+  unsigned int* indicies;
+} object_t;
 
 void gfxInit(void);
 void gfxClose(void);
-void gfxUpdate(void);
 
-void gfxSetBackground(void);
-void gfxDrawRaster(void);
-void gfxDrawGeometry(void);
+void gfxClear(void);       
+void gfxSetLight(fvec4_t location);
+
+void gfxIdentityMatrix(void);
+void gfxProjectionMatrix(void);
+void gfxSetFlags(int flags);
+void gfxSetColour(int colour);
+
+void gfxLoadTexture(void);
+void gfxLoadUVs(void);
+
+void gfxLoadVerts(fvec4_t* verts, unsigned int length);
+void gfxLoadIndicies(unsigned int* indicies, unsigned int length);
+
+void gfxDrawModel(void);
+void gfxFlip(void);
+
+void objInit(object_t* object, unsigned int verts, unsigned int size);
+void objClose(object_t* object);
 
 #endif // TL_GFX_H

@@ -23,7 +23,7 @@ LDEBUG=debug all
 LPRODUCTION=
 LFLAGS=$(L$(VERSION))
 
-TIDAL_OBJS=tlMain.obj tlGfx.obj tlAssert.obj tlAlloc.obj
+TIDAL_OBJS=tlMain.obj tlGfx.obj tlAssert.obj tlAlloc.obj tlVga.obj tlMaths.obj
 
 TIDAL.EXE : $(TIDAL_OBJS) TIDAL.LNK
 	echo $(MESSAGE_$(VERSION))
@@ -43,7 +43,7 @@ TIDAL.LNK: $(TIDAL_OBJS)
 .c: $(SRC_DIR)
 
 .asm.obj:
-	$(CC) $[* $(AFLAGS)
+	$(AS) $[* $(AFLAGS)
 
 .asm: $(SRC_DIR)
 

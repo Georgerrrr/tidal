@@ -36,7 +36,7 @@ void* tlaMalloc(size_t size) {
   alignedSize = ((size + sizeof(_tla_header)) & (~(TLA_PADDING-1))) + TLA_PADDING;
 
   if (BufferOffset + alignedSize > BufferSize) {
-    printf("Unable to allocate, buffer full/alloc too large!\n");
+    tlAssert(0, "Unable to allocate, tla full or alloc too large!");
     return NULL;
   }
 
