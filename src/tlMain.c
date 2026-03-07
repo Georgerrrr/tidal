@@ -36,7 +36,6 @@ static void Mainloop(void) {
 
     gfxClear();
 
-    // gfxIdentityMatrix();
     gfxSetFlags(GFX_TRIS | GFX_COLOURED);
     gfxSetColour(16);
 
@@ -56,35 +55,33 @@ int main(void) {
   InitMemory();
   gfxInit();
 
-  objInit(&testObj, 4, 6);
-  testObj.verts[0].x = FLOAT_TO_FIXED(.5);
-  testObj.verts[0].y = FLOAT_TO_FIXED(-.5);
-  testObj.verts[0].z = INT_TO_FIXED(1);
-  testObj.verts[0].w = INT_TO_FIXED(1);
+  objInit(&testObj, 3, 3);
+  testObj.verts[0].x = 0;
+  testObj.verts[0].y = 1;
+  testObj.verts[0].z = 1;
 
-  testObj.verts[1].x = FLOAT_TO_FIXED(0);
-  testObj.verts[1].y = FLOAT_TO_FIXED(0);
-  testObj.verts[1].z = INT_TO_FIXED(1);
-  testObj.verts[1].w = INT_TO_FIXED(1);
+  testObj.verts[1].x = -1;
+  testObj.verts[1].y = -1;
+  testObj.verts[1].z = 1;
 
-  testObj.verts[2].x = FLOAT_TO_FIXED(1);
-  testObj.verts[2].y = FLOAT_TO_FIXED(1);
-  testObj.verts[2].z = INT_TO_FIXED(1);
-  testObj.verts[2].w = INT_TO_FIXED(1);
-
-  testObj.verts[3].x = FLOAT_TO_FIXED(-1);
-  testObj.verts[3].y = FLOAT_TO_FIXED(1);
-  testObj.verts[3].z = INT_TO_FIXED(1);
-  testObj.verts[3].w = INT_TO_FIXED(1);
+  testObj.verts[2].x = 1;
+  testObj.verts[2].y = -1;
+  testObj.verts[2].z = 1;
 
   testObj.indicies[0] = 0;
   testObj.indicies[1] = 1;
   testObj.indicies[2] = 2;
-  testObj.indicies[3] = 3;
-  testObj.indicies[4] = 1;
-  testObj.indicies[5] = 2;
 
-  gfxProjectionMatrix();
+  gfxProjectionMatrix(GFX_PROJECTION_MATRIX, 0.1, 100, 90);
+  gfxIdentityMatrix(GFX_VIEW_MATRIX);
+
+  GFX_VIEW_MATRIX[3][1] = -10;
+  GFX_VIEW_MATRIX[3][2] = -20;
+
+  gfxUpdateMatrix(GFX_VIEW);
+
+  gfxIdentityMatrix(GFX_MODEL_MATRIX);
+  gfxUpdateMatrix(GFX_MODEL);
 
   Mainloop();
 

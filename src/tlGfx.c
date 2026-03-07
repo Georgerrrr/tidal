@@ -9,10 +9,6 @@
 #define SCREEN_WIDTH    320
 #define SCREEN_HEIGHT   200
 
-#define PROJECTION_RATIO FLOAT_TO_FIXED(0.013708643)
-#define PROJECTION_NEAR  FLOAT_TO_FIXED(0.01)
-#define PROJECTION_FAR   INT_TO_FIXED(100)
-
 #define MAX_MODEL_SIZE 4096 /* models can have up to 4096 verts */
 
 typedef struct {
@@ -28,10 +24,19 @@ static unsigned char* SCREEN_SEG;
 static unsigned char*  BackBuffer;
 static unsigned short* DepthBuffer;
 
-static xform_t Matrix;
+
+xform_t GFX_MODEL_MATRIX;
+xform_t GFX_VIEW_MATRIX;
+xform_t GFX_PROJECTION_MATRIX;
+
+static xform_t WorldMatrix; /* projection * view,
+                               so that it doesn't need to be recalculated for every model */
+static xform_t OutMatrix;
+
 static _verts Verts;
 static unsigned int* Indicies;
 static unsigned int  IndiciesLen;
+static int Flags;
 
 void SetVideoMode(int mode);
 void FillBuffer(void* buffer, int length);
@@ -71,38 +76,52 @@ void gfxClear(void) {
 void gfxSetLight(fvec4_t location) {
 }
 
-void gfxIdentityMatrix(void) {
-  Matrix[0][0] = INT_TO_FIXED(1);
-  Matrix[0][1] = 0;
-  Matrix[0][2] = 0;
-  Matrix[0][3] = 0;
+void gfxIdentityMatrix(xform_t matrix) {
+  matrix[0][0] = 1;
+  matrix[0][1] = 0;
+  matrix[0][2] = 0;
+  matrix[0][3] = 0;
 
-  Matrix[1][0] = 0;
-  Matrix[1][1] = INT_TO_FIXED(1);
-  Matrix[1][2] = 0;
-  Matrix[1][3] = 0;
+  matrix[1][0] = 0;
+  matrix[1][1] = 1;
+  matrix[1][2] = 0;
+  matrix[1][3] = 0;
 
-  Matrix[2][0] = 0;
-  Matrix[2][1] = 0;
-  Matrix[2][2] = INT_TO_FIXED(1);
-  Matrix[2][3] = 0;
+  matrix[2][0] = 0;
+  matrix[2][1] = 0;
+  matrix[2][2] = 1;
+  matrix[2][3] = 0;
 
-  Matrix[3][0] = 0;
-  Matrix[3][1] = 0;
-  Matrix[3][3] = 0;
-  Matrix[3][3] = 0; 
+  matrix[3][0] = 0;
+  matrix[3][1] = 0;
+  matrix[3][3] = 0;
+  matrix[3][3] = 1; 
 }
 
-void gfxProjectionMatrix(void) {
-  gfxIdentityMatrix();
-  Matrix[0][0] = PROJECTION_RATIO;
-  Matrix[1][1] = PROJECTION_RATIO;
-  Matrix[2][2] = FixedDiv(-PROJECTION_FAR, (PROJECTION_FAR - PROJECTION_NEAR));
-  Matrix[3][2] = FixedMul(-PROJECTION_FAR, FixedDiv(PROJECTION_NEAR, (PROJECTION_FAR - PROJECTION_NEAR)));
-  Matrix[2][3] = FLOAT_TO_FIXED(-1);
+void gfxProjectionMatrix(xform_t matrix, float pnear, float pfar, float angle) {
+  float scale;
+
+  scale = 1 / tan(angle * 0.5 * M_PI / 180);
+  matrix[0][0] = scale;
+  matrix[1][1] = scale;
+  matrix[2][2] = -pfar / (pfar - pnear);
+  matrix[3][2] = -pfar * pnear / (pfar - pnear);
+  matrix[2][3] = -1;
+  matrix[3][3] = 0;
+}
+
+void gfxUpdateMatrix(int scope) {
+  if (scope == GFX_VIEW)
+    ConcatTransforms(GFX_PROJECTION_MATRIX, GFX_VIEW_MATRIX, WorldMatrix);
+
+  ConcatTransforms(WorldMatrix, GFX_MODEL_MATRIX, OutMatrix);
 }
 
 void gfxSetFlags(int flags) {
+  tlAssert((flags & (GFX_TRIS | GFX_QUADS)) != (GFX_TRIS | GFX_QUADS), "Model must be tris or quads!");
+  tlAssert((flags & (GFX_COLOURED | GFX_TEXTURED)) != (GFX_COLOURED | GFX_TEXTURED), "Model must be coloured or textured!");
+
+  Flags = flags;
 }
 
 void gfxSetColour(int colour) {
@@ -114,22 +133,11 @@ void gfxLoadTexture(void) {
 void gfxLoadUVs(void) {
 }
 
-static void VectorXform(xform_t Matrix, fvec4_t* iVec, fvec4_t* oVec) {
-  int i;
-
-  fixed_t* axis = (fixed_t*)oVec;
-
-  for (i = 0 ; i < 3 ; i++) {
-    *axis++ = FixedMul(Matrix[i][0], iVec->x) +
-      FixedMul(Matrix[i][1], iVec->y) +
-      FixedMul(Matrix[i][2], iVec->z) +
-      Matrix[i][3];
-  }
-}
-
 void gfxLoadVerts(fvec4_t* verts, unsigned int length) {
   unsigned int i;
   int t;
+
+  float hw, hh;
 
   fvec4_t* points;
   fvec4_t* transformed;
@@ -143,22 +151,20 @@ void gfxLoadVerts(fvec4_t* verts, unsigned int length) {
   projected   = Verts.projected;
   screen      = Verts.screen;
 
+  hw = SCREEN_WIDTH / 2;
+  hh = SCREEN_HEIGHT / 2;
+
   for (i = 0 ; i < length ; i++, points++, transformed++, projected++, screen++) {
-    VectorXform(Matrix, points, projected);
+    VectorTransform(OutMatrix, points, projected);
 
-    /*
-    projected->x = FixedMul(FixedDiv(transformed->x, transformed->z), FLOAT_TO_FIXED(PROJECTION_RATIO * (SCREEN_WIDTH / 2)));
-    projected->y = FixedMul(FixedDiv(transformed->y, transformed->z), FLOAT_TO_FIXED(PROJECTION_RATIO * (SCREEN_WIDTH / 2)));
-    projected->z = transformed->z;
-    */
-
-    screen->x = ROUNDED_FIXED_TO_INT(projected->x) + (SCREEN_WIDTH / 2);
-    t = ROUNDED_FIXED_TO_INT(-projected->y);
-    screen->y = ROUNDED_FIXED_TO_INT((-projected->y)) + (SCREEN_HEIGHT / 2);
+    screen->x = projected->x * hw + hw;
+    screen->y = -projected->y * hh + hh;
   }
 }
 
 void gfxLoadIndicies(unsigned int* indicies, unsigned int length) {
+  Indicies = indicies;
+  IndiciesLen = length;
 }
 
 void gfxDrawModel(void) {

@@ -11,6 +11,9 @@
 #define GFX_TEXTURED          0x10 
 #define GFX_COLOURED          0x20
 
+#define GFX_VIEW              0x01 
+#define GFX_MODEL             0x02
+
 typedef struct {
   unsigned int vertsLength;
   unsigned int indiciesLen;
@@ -19,14 +22,20 @@ typedef struct {
   unsigned int* indicies;
 } object_t;
 
+extern xform_t GFX_MODEL_MATRIX;
+extern xform_t GFX_VIEW_MATRIX;
+extern xform_t GFX_PROJECTION_MATRIX;
+
 void gfxInit(void);
 void gfxClose(void);
 
 void gfxClear(void);       
 void gfxSetLight(fvec4_t location);
 
-void gfxIdentityMatrix(void);
-void gfxProjectionMatrix(void);
+void gfxIdentityMatrix(xform_t matrix);
+void gfxProjectionMatrix(xform_t matrix, float pnear, float pfar, float angle);
+void gfxUpdateMatrix(int scope);
+
 void gfxSetFlags(int flags);
 void gfxSetColour(int colour);
 
