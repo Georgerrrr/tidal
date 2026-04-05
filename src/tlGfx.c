@@ -1,21 +1,20 @@
 #include <stdio.h> 
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 
 #include "include/tlAssert.h"
 #include "include/tlAlloc.h"
 #include "include/tlGfx.h"
+#include "include/tlObj.h"
 
 #define SCREEN_WIDTH    320
 #define SCREEN_HEIGHT   200
-
-#define MAX_MODEL_SIZE 4096 /* models can have up to 4096 verts */
 
 typedef struct {
   fvec4_t* transformed;
   fvec4_t* projected;
   point_t* screen;
-  fvec2_t* uvs;
   unsigned int length;
 } _verts;
 
@@ -34,9 +33,12 @@ static xform_t WorldMatrix; /* projection * view,
 static xform_t OutMatrix;
 
 static _verts Verts;
-static unsigned int* Indicies;
+static unsigned short* Indicies;
 static unsigned int  IndiciesLen;
 static int Flags;
+static int Colour;
+static image_t Texture;
+static fvec2_t* Uvs;
 
 void SetVideoMode(int mode);
 void FillBuffer(void* buffer, int length);
@@ -51,13 +53,11 @@ void gfxInit(void) {
   Verts.transformed = tlaMalloc(MAX_MODEL_SIZE * sizeof(fvec4_t));
   Verts.projected = tlaMalloc(MAX_MODEL_SIZE * sizeof(fvec4_t));
   Verts.screen = tlaMalloc(MAX_MODEL_SIZE * sizeof(point_t));
-  Verts.uvs = tlaMalloc(MAX_MODEL_SIZE * sizeof(fvec2_t));
 
   SetVideoMode(0x13);
 }
 
 void gfxClose(void) {
-  tlaFree(Verts.uvs);
   tlaFree(Verts.screen);
   tlaFree(Verts.projected);
   tlaFree(Verts.transformed);
@@ -74,6 +74,10 @@ void gfxClear(void) {
 }
 
 void gfxSetLight(fvec4_t location) {
+}
+
+void gfxZeroMatrix(xform_t matrix) {
+  memset(matrix, 0, sizeof(float) * 16);
 }
 
 void gfxIdentityMatrix(xform_t matrix) {
@@ -98,21 +102,98 @@ void gfxIdentityMatrix(xform_t matrix) {
   matrix[3][3] = 1; 
 }
 
-void gfxProjectionMatrix(xform_t matrix, float pnear, float pfar, float angle) {
+void gfxSetTransformMatrix(xform_t matrix, float px, float py, float pz, float rx, float ry, float rz) {
+  gfxIdentityMatrix(matrix);
+  matrix[0][3] = px;
+  matrix[1][3] = py;
+  matrix[2][3] = pz;
+  if (rx != 0) gfxAppendRotationX(matrix, rx);
+  if (ry != 0) gfxAppendRotationY(matrix, ry);
+  if (rz != 0) gfxAppendRotationZ(matrix, rz);
+}
+
+void gfxSetTransformPosition(xform_t matrix, float px, float py, float pz) {
+  matrix[0][3] = px;
+  matrix[1][3] = py;
+  matrix[2][3] = pz;
+}
+
+void gfxAppendRotationX(xform_t matrix, float rx) {
+  float temp10, temp11, temp12, temp20, temp21, temp22;
+  float cos_temp = cos(rx);
+  float sin_temp = sin(rx);
+
+  temp10 = cos_temp * matrix[1][0] - sin_temp * matrix[2][0];
+  temp11 = cos_temp * matrix[1][1] - sin_temp * matrix[2][1];
+  temp12 = cos_temp * matrix[1][2] - sin_temp * matrix[2][2];
+  temp20 = sin_temp * matrix[1][0] + cos_temp * matrix[2][0];
+  temp21 = sin_temp * matrix[1][1] + cos_temp * matrix[2][1];
+  temp22 = sin_temp * matrix[1][2] + cos_temp * matrix[2][2];
+  matrix[1][0] = temp10;
+  matrix[1][1] = temp11;
+  matrix[1][2] = temp12;
+  matrix[2][0] = temp20;
+  matrix[2][1] = temp21;
+  matrix[2][2] = temp22;
+}
+
+void gfxAppendRotationY(xform_t matrix, float ry) {
+  float temp00, temp01, temp02, temp20, temp21, temp22;
+  float cos_temp = cos(ry);
+  float sin_temp = sin(ry);
+
+  temp00 = cos_temp * matrix[0][0] + sin_temp * matrix[2][0];
+  temp01 = cos_temp * matrix[0][1] + sin_temp * matrix[2][1];
+  temp02 = cos_temp * matrix[0][2] + sin_temp * matrix[2][2];
+  temp20 = cos_temp * matrix[2][0] - sin_temp * matrix[0][0];
+  temp21 = cos_temp * matrix[2][1] - sin_temp * matrix[0][1];
+  temp22 = cos_temp * matrix[2][2] - sin_temp * matrix[0][2];
+
+  matrix[0][0] = temp00;
+  matrix[0][1] = temp01;
+  matrix[0][2] = temp02;
+  matrix[2][0] = temp20;
+  matrix[2][1] = temp21;
+  matrix[2][2] = temp22;
+}
+
+void gfxAppendRotationZ(xform_t matrix, float rz) {
+  float temp00, temp01, temp02, temp10, temp11, temp12;
+  float cos_temp = cos(rz);
+  float sin_temp = sin(rz);
+
+  temp00 = cos_temp * matrix[0][0] - sin_temp * matrix[1][0];
+  temp01 = cos_temp * matrix[0][1] - sin_temp * matrix[1][1];
+  temp02 = cos_temp * matrix[0][2] - sin_temp * matrix[1][2];
+  temp10 = sin_temp * matrix[0][0] + cos_temp * matrix[1][0];
+  temp11 = sin_temp * matrix[0][1] + cos_temp * matrix[1][1];
+  temp12 = sin_temp * matrix[0][2] + cos_temp * matrix[1][2];
+
+  matrix[0][0] = temp00;
+  matrix[0][1] = temp01;
+  matrix[0][2] = temp02;
+  matrix[1][0] = temp10;
+  matrix[1][1] = temp11;
+  matrix[1][2] = temp12;
+}
+
+void gfxProjectionMatrix(xform_t matrix, float fov, float aspect, float pnear, float pfar) {
   float scale;
 
-  scale = 1 / tan(angle * 0.5 * M_PI / 180);
-  matrix[0][0] = scale;
+  gfxZeroMatrix(matrix);
+
+  scale = 1 / tan(fov * M_PI / 360.f);
+  matrix[0][0] = scale * aspect;
   matrix[1][1] = scale;
-  matrix[2][2] = -pfar / (pfar - pnear);
-  matrix[3][2] = -pfar * pnear / (pfar - pnear);
-  matrix[2][3] = -1;
-  matrix[3][3] = 0;
+  matrix[2][2] = -(pfar + pnear) / (pfar - pnear);
+  matrix[3][2] = -1.f;
+  matrix[2][3] = -(2 * pfar * pnear)  / (pfar - pnear);
 }
 
 void gfxUpdateMatrix(int scope) {
-  if (scope == GFX_VIEW)
+  if (scope == GFX_WORLD) {
     ConcatTransforms(GFX_PROJECTION_MATRIX, GFX_VIEW_MATRIX, WorldMatrix);
+  }
 
   ConcatTransforms(WorldMatrix, GFX_MODEL_MATRIX, OutMatrix);
 }
@@ -125,12 +206,17 @@ void gfxSetFlags(int flags) {
 }
 
 void gfxSetColour(int colour) {
+  Colour = colour;
 }
 
-void gfxLoadTexture(void) {
+void gfxLoadTexture(image_t* texture) {
+  Texture.data = texture->data;
+  Texture.width = texture->width;
+  Texture.height = texture->height;
 }
 
-void gfxLoadUVs(void) {
+void gfxLoadUVs(fvec2_t* uvs) {
+  Uvs = uvs;
 }
 
 void gfxLoadVerts(fvec4_t* verts, unsigned int length) {
@@ -140,8 +226,8 @@ void gfxLoadVerts(fvec4_t* verts, unsigned int length) {
   float hw, hh;
 
   fvec4_t* points;
-  fvec4_t* transformed;
   fvec4_t* projected;
+  fvec4_t* transformed;
   point_t* screen;
 
   Verts.length = length;
@@ -155,44 +241,287 @@ void gfxLoadVerts(fvec4_t* verts, unsigned int length) {
   hh = SCREEN_HEIGHT / 2;
 
   for (i = 0 ; i < length ; i++, points++, transformed++, projected++, screen++) {
-    VectorTransform(OutMatrix, points, projected);
+    VectorTransform(OutMatrix, points, transformed);
 
-    screen->x = projected->x * hw + hw;
-    screen->y = -projected->y * hh + hh;
+    projected->x = transformed->x / transformed->z;
+    projected->y = transformed->y / transformed->z;
+    projected->z = transformed->z;
+
+    screen->x = (projected->x) * hw + hw;
+    screen->y = -(projected->y) * hh + hh;
   }
 }
 
-void gfxLoadIndicies(unsigned int* indicies, unsigned int length) {
+void gfxLoadIndicies(unsigned short* indicies, unsigned int length) {
   Indicies = indicies;
   IndiciesLen = length;
 }
 
-void gfxDrawModel(void) {
+typedef struct {
+  int DestX,
+      Width,
+      Height;
+
+  int Step,
+      Direction,
+      Err,
+      AdjUp,
+      AdjDown;
+
+  fvec2_t uv;
+  fvec2_t uvStep;
+
+  float ZI;
+  float ZIStep;
+} _edge;
+
+static int TopLeft(point_t a, point_t b) {
+  return ((a.y < b.y) || (a.y == b.y && a.x < b.x));
+}
+
+static int InitEdge(_edge* edge, unsigned int a, unsigned int b) {
+  float bzi;
+
+  edge->Height = Verts.screen[b].y - Verts.screen[a].y;
+  if (edge->Height <= 0) return 1;
+
+  edge->Width = Verts.screen[b].x - Verts.screen[a].x;
+  edge->DestX = Verts.screen[a].x;
+
+  edge->uv = Uvs[a];
+  edge->uvStep.x = (Uvs[b].x - Uvs[a].x) / edge->Height;
+  edge->uvStep.y = (Uvs[b].y - Uvs[a].y) / edge->Height;
+
+  edge->ZI = 1 / Verts.projected[a].z;
+  bzi = 1 / Verts.projected[b].z;
+  edge->ZIStep = (bzi - edge->ZI) / edge->Height;
+
+  edge->Step = edge->Width / edge->Height;
+
+  if (edge->Width < 0) {
+    edge->Direction = -1;
+    edge->AdjUp = (-edge->Width) % edge->Height;
+    edge->Err = 1 - edge->Height;
+  }
+  else {
+    edge->Direction = 1;
+    edge->AdjUp = edge->Width % edge->Height;
+    edge->Err = 0;
+  }
+  edge->AdjDown = edge->Height;
+
+  return 0;
+}
+
+static void StepEdge(_edge* edge) {
+  edge->uv.x += edge->uvStep.x;
+  edge->uv.y += edge->uvStep.y;
+
+  edge->ZI += edge->ZIStep;
+
+  edge->DestX += edge->Step;
+  if ((edge->Err += edge->AdjUp) > 0) {
+    edge->DestX += edge->Direction;
+    edge->Err -= edge->AdjDown;
+  }
+}
+
+static void DrawScanline(int y, _edge* longEdge, _edge* shortEdge) {
+  int i;
+  unsigned char* writePtr;
+  unsigned char* readPtr;
+
+  fvec2_t uv;
+  fvec2_t uvStep;
+
+  int startX, endX;
+
+  if (longEdge->DestX == shortEdge->DestX) return;
+
+  if (longEdge->DestX > shortEdge->DestX) {
+    uv = shortEdge->uv;
+    startX = shortEdge->DestX;
+    endX   = longEdge->DestX;
+    uvStep.x = (longEdge->uv.x - uv.x) / (float)(endX - startX);
+    uvStep.y = (longEdge->uv.y - uv.y) / (float)(endX - startX);
+  }
+  else {
+    uv = longEdge->uv;
+
+    startX = longEdge->DestX;
+    endX   = shortEdge->DestX;
+
+    uvStep.x = (shortEdge->uv.x - uv.x) / (float)(endX - startX);
+    uvStep.y = (shortEdge->uv.y - uv.y) / (float)(endX - startX);
+  }
+
+  uv.x += (uvStep.x / 2);
+  uv.y += (uvStep.y / 2);
+
+  if (startX < 0) {
+    uv.x += (uvStep.x * (-startX));
+    uv.y += (uvStep.y * (-startX));
+    startX = 0;
+  }
+  if (endX > SCREEN_WIDTH) endX = SCREEN_WIDTH;
+
+  readPtr = Texture.data; 
+  writePtr = BackBuffer + (y * SCREEN_WIDTH + startX);
+
+  for (i = startX ; i < endX ; i++, writePtr++) {
+    int x, y;
+
+    x = (int)((float)((uv.x * (Texture.width-1)) + 0.5f)); 
+    y = (int)((float)((uv.y * (Texture.height-1)) + 0.5f)); 
+    *writePtr = readPtr[y * Texture.width + x];
+    /* readPtr = Texture.data + ((int)(uv.y * Texture.height) * Texture.width) + ((int)(uv.x * Texture.width)); */
+    uv.x += uvStep.x;
+    uv.y += uvStep.y;
+  }
+}
+
+/* rendering a tri is a multi-stage process
+ * it initialises the edges so that for 
+ * each scanline it can update the start
+ * and end positions.
+ * So the positions must be sorted based
+ * on their height. Then rendering is split
+ * into the tri's upper and lower halves.
+ */
+static void RenderTri(unsigned short* indicies) {
+  point_t points[3];
+  unsigned int ordered[3];
   unsigned int i;
 
-  point_t* point;
+  int v1, w1, v2, w2;
 
-  point = Verts.screen;
+  int y;
 
-  for (i = 0 ; i < Verts.length ; i++, point++) {
-    BackBuffer[point->y * SCREEN_WIDTH + point->x] = 1;
+  _edge longEdge;
+  _edge shortEdge;
+
+  /* don't render if it's behind the screen */
+  if (Verts.projected[indicies[0]].z <= 1) return;
+  if (Verts.projected[indicies[1]].z <= 1) return;
+  if (Verts.projected[indicies[2]].z <= 1) return;
+
+  points[0] = Verts.screen[indicies[0]];
+  points[1] = Verts.screen[indicies[1]];
+  points[2] = Verts.screen[indicies[2]];
+
+  v1 = points[1].x - points[0].x;
+  w1 = points[2].x - points[0].x;
+  v2 = points[1].y - points[0].y;
+  w2 = points[2].y - points[0].y;
+
+  if ((v1 * w2 - v2 * w1) > 0) return;
+
+  ordered[0] = 0;
+  ordered[1] = 1;
+  ordered[2] = 2;
+
+  if (TopLeft(points[0], points[1])) {
+    if (TopLeft(points[1], points[2])) {
+      ordered[0] = 0;
+      ordered[1] = 1;
+      ordered[2] = 2;
+    }
+    else {
+      if (TopLeft(points[0], points[2])) {
+        ordered[0] = 0;
+        ordered[1] = 2;
+        ordered[2] = 1;
+      }
+      else {
+        ordered[0] = 2;
+        ordered[1] = 0;
+        ordered[2] = 1;
+      }
+    }
+  }
+  else {
+    if (TopLeft(points[1], points[2])) {
+      if (TopLeft(points[0], points[2])) {
+        ordered[0] = 1;
+        ordered[1] = 0;
+        ordered[2] = 2;
+      }
+      else {
+        ordered[0] = 1;
+        ordered[1] = 2; 
+        ordered[2] = 0;
+      }
+    }
+    else {
+      ordered[0] = 2;
+      ordered[1] = 1;
+      ordered[2] = 0;
+    }
+  }
+
+  /* init long edge 
+   * if it returns 1 that means the tri is 0 in length, so don't bother */
+  if (InitEdge(&longEdge, indicies[ordered[0]], indicies[ordered[2]])) return;
+
+  y = points[ordered[0]].y;
+
+  if (InitEdge(&shortEdge, indicies[ordered[0]], indicies[ordered[1]])) goto DRAW_TRI_LOWER_HALF;
+
+  for (i = 0 ; i < shortEdge.Height ; i++, y++) {
+    if (y >= SCREEN_HEIGHT) return;
+    if (y >= 0) {
+      DrawScanline(y, &longEdge, &shortEdge);
+    }
+
+    StepEdge(&shortEdge);
+    StepEdge(&longEdge);
+  }
+
+DRAW_TRI_LOWER_HALF:
+  if (InitEdge(&shortEdge, indicies[ordered[1]], indicies[ordered[2]])) return;
+
+  for (i = 0 ; i < shortEdge.Height ; i++, y++) {
+    if (y >= SCREEN_HEIGHT) return;
+    if (y >= 0) {
+      DrawScanline(y, &longEdge, &shortEdge);
+    }
+
+    StepEdge(&shortEdge);
+    StepEdge(&longEdge);
+  }
+}
+
+void RenderTriVerts(unsigned short* indicies) {
+  point_t p;
+  int i;
+
+  for (i = 0 ; i < 3 ; i++, indicies++) {
+    if (Verts.projected[*indicies].z <= 0) continue;
+
+    p = Verts.screen[*indicies];
+    if (p.y < 0) continue;
+    if (p.x < 0) continue; 
+    if (p.y >= 200) continue; 
+    if (p.x >= 320) continue;
+    BackBuffer[p.y * 320 + p.x] = 3;
+  }
+}
+
+void gfxDrawModel(void) {
+  unsigned short *index;
+  unsigned int i;
+  unsigned int step;
+
+  void (*RenderFunc)(unsigned short*);
+
+  RenderFunc = RenderTri;
+  step       = 3;
+
+  for (i = 0, index = Indicies; i < IndiciesLen ; i += step, index += step) {
+    RenderFunc(index);
   }
 }
 
 void gfxFlip(void) {
   CopyBuffer(SCREEN_SEG, BackBuffer, SCREEN_WIDTH * SCREEN_HEIGHT);
-}
-
-void objInit(object_t* object, unsigned int vl, unsigned int il) {
-  tlAssert(vl <= MAX_MODEL_SIZE, "Loaded object greater than max valid size!");
-
-  object->vertsLength = vl;
-  object->indiciesLen = il;
-
-  object->verts    = (fvec4_t*)rlcMalloc(vl * sizeof(fvec4_t));
-  object->indicies = (unsigned int*)rlcMalloc(vl * sizeof(unsigned int));
-}
-
-void objClose(object_t* object) {
-  rlcFree(object->verts);
 }

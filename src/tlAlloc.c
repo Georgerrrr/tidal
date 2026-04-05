@@ -110,13 +110,13 @@ void* rlcMalloc(size_t size) {
   prev    = NULL;
 
 	while (current != NULL) {
-    if (current->size >= alignedSize) goto FOUND_VALID_RLC_SEGMENT;
+    if (current->size >= alignedSize) goto RLC_ALLOC_VALID_SEGMENT;
     prev    = current;
 		current = current->next;
 	}
 
   return NULL;
-FOUND_VALID_RLC_SEGMENT:
+RLC_ALLOC_VALID_SEGMENT:
 
   if (current->size == alignedSize) { /* new alloc takes the whole space of the segment */
     if (NULL != prev) prev->next = current->next;
@@ -137,6 +137,67 @@ FOUND_VALID_RLC_SEGMENT:
 	return current + 1;
 }
 
+void* rlcRealloc(void* ptr, size_t size) {
+  _rla_header* segment;
+  _rla_header *current, *prev, *newSeg;
+
+  void* newPtr;
+
+  size_t alignedSize;
+  size_t difference;
+
+  if (ptr == NULL) {
+    return rlcMalloc(size);
+  }
+
+  segment = (_rla_header*)ptr - 1;
+
+	alignedSize = ((size + sizeof(_rla_header)) & (~(RLC_PADDING-1))) + RLC_PADDING;
+
+  if (alignedSize <= segment->size) { /* like if the increase in size is less than padding */
+    return ptr; /* nothing needs to be done */
+  }
+
+  current = rlaRoot;
+  prev    = NULL;
+
+  while (current != NULL) {
+    if (current > segment) goto RLC_REALLOC_CONSOLIDATE;
+    prev    = current;
+    current = current->next;
+  }
+  return NULL;
+RLC_REALLOC_CONSOLIDATE:
+  /* if there's no free block immediately after, or if the block immediately after isn't big enough,
+   * go to the worst case (new alloc, memcpy, free) */
+  if (current != ((_rla_header*)((unsigned char*)segment + segment->size))) goto RLC_REALLOC_WORST_CASE;
+  if (alignedSize > (segment->size + current->size)) goto RLC_REALLOC_WORST_CASE;
+
+  difference = alignedSize - segment->size;
+  if (current->size == difference) /* the extension eats the entire next segment */
+  {
+    if (prev == NULL) rlaRoot = current->next;
+    else              prev->next = current->next;
+  }
+  else 
+  {
+    newSeg = ((_rla_header*)((unsigned char*)segment + alignedSize)); 
+    newSeg->next = current->next;
+    newSeg->size = current->size - difference;
+    if (prev == NULL) rlaRoot = newSeg;
+    else              prev->next = newSeg;
+  }
+  segment->size = alignedSize;
+  return ptr;
+
+RLC_REALLOC_WORST_CASE:
+  newPtr = rlcMalloc(size);
+  memcpy(newPtr, ptr, segment->size - sizeof(_rla_header));
+  rlcFree(ptr);
+
+  return newPtr;
+}
+
 void rlcFree(void* ptr) {
 	_rla_header* segment;
   _rla_header *current, *prev;
@@ -147,11 +208,11 @@ void rlcFree(void* ptr) {
   prev    = NULL;
 
   while (NULL != current) {
-    if (current > segment) goto RLC_CONSOLIDATE;
+    if (current > segment) goto RLC_FREE_CONSOLIDATE;
     prev = current;
     current = current->next;
   }
-RLC_CONSOLIDATE:
+RLC_FREE_CONSOLIDATE:
   segment->next = current;
   if (NULL == prev) rlaRoot = segment;
   else              prev->next = segment;

@@ -21,9 +21,10 @@ void tlaDump(FILE* out);
  Free list allocator
 */
 
-void rlcInit(void* mem, size_t memsize);
+void  rlcInit(void* mem, size_t memsize);
 
 void* rlcMalloc(size_t size);
-void rlcFree(void* ptr);
+void* rlcRealloc(void* ptr, size_t size);
+void  rlcFree(void* ptr);
 
 #endif // TL_ALLOC_H

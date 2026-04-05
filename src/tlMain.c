@@ -1,9 +1,12 @@
 #include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <conio.h>
 
 #include "include/tlAlloc.h"
+#include "include/tlObj.h"
 #include "include/tlGfx.h"
+#include "include/tlBitmap.h"
 
 #define MIN_MEMORY_SIZE 0x100000 /* alloc 1mb */
 #define RLC_MEMORY_SIZE 0x8000   
@@ -11,7 +14,15 @@
 static void* Buffer;
 static void* RBuffer;
 
-object_t testObj;
+typedef struct {
+  object_t obj;
+  image_t  image;
+  float x,
+        y,
+        z;
+} model_t; 
+
+model_t testObj;
 
 static void InitMemory(void) {
 	Buffer = malloc(MIN_MEMORY_SIZE);
@@ -27,20 +38,63 @@ static void CloseMemory(void) {
 }
 
 static void Mainloop(void) {
+  float move = .1f;
+
   while (1) {
     if (kbhit()) {
       switch (getch()) {
         case 0x1B: goto EXIT_MAINLOOP;
+        case 'x':
+        {
+          gfxAppendRotationX(GFX_MODEL_MATRIX, 0.1);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 'y':
+        {
+          gfxAppendRotationY(GFX_MODEL_MATRIX, 0.1);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 'z':
+        {
+          gfxAppendRotationZ(GFX_MODEL_MATRIX, 0.1);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 0x4b:
+        {
+          testObj.x -= move;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 0x48:
+        {
+          testObj.z -= move;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 0x4d:
+        {
+          testObj.x += move;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 0x50:
+        {
+          testObj.z += move;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
       }
     }
 
     gfxClear();
 
-    gfxSetFlags(GFX_TRIS | GFX_COLOURED);
-    gfxSetColour(16);
+    gfxSetFlags(GFX_TRIS | GFX_TEXTURED);
 
-    gfxLoadVerts(testObj.verts, testObj.vertsLength);
-    gfxLoadIndicies(testObj.indicies, testObj.indiciesLen);
+    gfxLoadVerts(testObj.obj.verts, testObj.obj.vertsLength);
+    gfxLoadIndicies(testObj.obj.indicies, testObj.obj.indiciesLen);
+
+    gfxLoadUVs(testObj.obj.uvs);
+    gfxLoadTexture(&testObj.image);
 
     gfxDrawModel();
 
@@ -55,38 +109,24 @@ int main(void) {
   InitMemory();
   gfxInit();
 
-  objInit(&testObj, 3, 3);
-  testObj.verts[0].x = 0;
-  testObj.verts[0].y = 1;
-  testObj.verts[0].z = 1;
+  objLoad(&testObj.obj, strLocal("C:\\TIDAL\\RES\\MODEL.DAT"));
+  imgLoad(&testObj.image, strLocal("C:\\TIDAL\\RES\\TEX.BMP"));
+  testObj.x = 0;
+  testObj.y = 0;
+  testObj.z = 0;
 
-  testObj.verts[1].x = -1;
-  testObj.verts[1].y = -1;
-  testObj.verts[1].z = 1;
+  gfxProjectionMatrix(GFX_PROJECTION_MATRIX, 90.f, 5.f / 8.f, 0.1, 100);
+  gfxSetTransformMatrix(GFX_VIEW_MATRIX, 0, 0, -4, 0, 0, 0);
+  gfxSetTransformMatrix(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z, 0, 0, 0);
 
-  testObj.verts[2].x = 1;
-  testObj.verts[2].y = -1;
-  testObj.verts[2].z = 1;
-
-  testObj.indicies[0] = 0;
-  testObj.indicies[1] = 1;
-  testObj.indicies[2] = 2;
-
-  gfxProjectionMatrix(GFX_PROJECTION_MATRIX, 0.1, 100, 90);
-  gfxIdentityMatrix(GFX_VIEW_MATRIX);
-
-  GFX_VIEW_MATRIX[3][1] = -10;
-  GFX_VIEW_MATRIX[3][2] = -20;
-
-  gfxUpdateMatrix(GFX_VIEW);
-
-  gfxIdentityMatrix(GFX_MODEL_MATRIX);
-  gfxUpdateMatrix(GFX_MODEL);
+  gfxUpdateMatrix(GFX_WORLD);
 
   Mainloop();
 
 ProgEnd:
+  objClose(&testObj.obj);
   gfxClose();
+
   CloseMemory();
 	return 0;
 }
