@@ -121,7 +121,7 @@ void objInit(object_t* object, unsigned int vl, unsigned int il) {
   object->verts    = (fvec4_t*)rlcMalloc(vl * sizeof(fvec4_t));
   object->normals  = (fvec4_t*)rlcMalloc(vl * sizeof(fvec4_t));
   object->uvs      = (fvec2_t*)rlcMalloc(vl * sizeof(fvec2_t));
-  object->indicies = (unsigned short*)rlcMalloc(vl * sizeof(unsigned short));
+  object->indicies = (unsigned short*)rlcMalloc(il * sizeof(unsigned short));
 }
 
 void objClose(object_t* object) {
