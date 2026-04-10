@@ -23,7 +23,6 @@ static unsigned char* SCREEN_SEG;
 static unsigned char*  BackBuffer;
 static unsigned short* DepthBuffer;
 
-
 xform_t GFX_MODEL_MATRIX;
 xform_t GFX_VIEW_MATRIX;
 xform_t GFX_PROJECTION_MATRIX;
@@ -283,10 +282,12 @@ static int TopLeft(point_t a, point_t b) {
 static int InitEdge(_edge* edge, unsigned int a, unsigned int b) {
   float bzi;
 
+  edge->Width = Verts.screen[b].x - Verts.screen[a].x; /* need to set the width cuz it's used later to decide 
+                                                          which edge is left and right */
+
   edge->Height = Verts.screen[b].y - Verts.screen[a].y;
   if (edge->Height <= 0) return 1;
 
-  edge->Width = Verts.screen[b].x - Verts.screen[a].x;
   edge->DestX = Verts.screen[a].x;
 
   edge->uv = Uvs[a];
@@ -327,34 +328,31 @@ static void StepEdge(_edge* edge) {
   }
 }
 
-static void DrawScanline(int y, _edge* longEdge, _edge* shortEdge) {
+static void DrawScanlineSlow(int y, _edge* leftEdge, _edge* rightEdge) {
   int i;
   unsigned char* writePtr;
   unsigned char* readPtr;
+  unsigned short* depthPtr;
 
   fvec2_t uv;
   fvec2_t uvStep;
 
+  float zi,
+        ziStep;
+
   int startX, endX;
 
-  if (longEdge->DestX == shortEdge->DestX) return;
+  if (leftEdge->DestX == rightEdge->DestX) return;
 
-  if (longEdge->DestX > shortEdge->DestX) {
-    uv = shortEdge->uv;
-    startX = shortEdge->DestX;
-    endX   = longEdge->DestX;
-    uvStep.x = (longEdge->uv.x - uv.x) / (float)(endX - startX);
-    uvStep.y = (longEdge->uv.y - uv.y) / (float)(endX - startX);
-  }
-  else {
-    uv = longEdge->uv;
+  zi = leftEdge->ZI;
+  uv = leftEdge->uv;
+  startX = leftEdge->DestX;
 
-    startX = longEdge->DestX;
-    endX   = shortEdge->DestX;
+  ziStep = (rightEdge->ZI - zi) / (float)(endX - startX);
+  endX   = rightEdge->DestX;
 
-    uvStep.x = (shortEdge->uv.x - uv.x) / (float)(endX - startX);
-    uvStep.y = (shortEdge->uv.y - uv.y) / (float)(endX - startX);
-  }
+  uvStep.x = (rightEdge->uv.x - uv.x) / (float)(endX - startX);
+  uvStep.y = (rightEdge->uv.y - uv.y) / (float)(endX - startX);
 
   uv.x += (uvStep.x / 2);
   uv.y += (uvStep.y / 2);
@@ -368,16 +366,20 @@ static void DrawScanline(int y, _edge* longEdge, _edge* shortEdge) {
 
   readPtr = Texture.data; 
   writePtr = BackBuffer + (y * SCREEN_WIDTH + startX);
+  depthPtr = DepthBuffer + (y * SCREEN_WIDTH + startX);
 
-  for (i = startX ; i < endX ; i++, writePtr++) {
+  for (i = startX ; i < endX ; i++, writePtr++, depthPtr++, uv.x += uvStep.x, uv.y += uvStep.y, zi += ziStep) {
     int x, y;
+    unsigned short z;
+
+    z = (unsigned short)(zi * 0xffff);
+
+    if (*depthPtr > z) continue;
+    *depthPtr = z;
 
     x = (int)((float)((uv.x * (Texture.width-1)) + 0.5f)); 
     y = (int)((float)((uv.y * (Texture.height-1)) + 0.5f)); 
     *writePtr = readPtr[y * Texture.width + x];
-    /* readPtr = Texture.data + ((int)(uv.y * Texture.height) * Texture.width) + ((int)(uv.x * Texture.width)); */
-    uv.x += uvStep.x;
-    uv.y += uvStep.y;
   }
 }
 
@@ -392,7 +394,7 @@ static void DrawScanline(int y, _edge* longEdge, _edge* shortEdge) {
 static void RenderTri(unsigned short* indicies) {
   point_t points[3];
   unsigned int ordered[3];
-  unsigned int i;
+  unsigned int temp;
 
   int v1, w1, v2, w2;
 
@@ -400,6 +402,8 @@ static void RenderTri(unsigned short* indicies) {
 
   _edge longEdge;
   _edge shortEdge;
+  _edge* leftEdge;
+  _edge* rightEdge;
 
   /* don't render if it's behind the screen */
   if (Verts.projected[indicies[0]].z <= 1) return;
@@ -421,90 +425,95 @@ static void RenderTri(unsigned short* indicies) {
   ordered[1] = 1;
   ordered[2] = 2;
 
-  if (TopLeft(points[0], points[1])) {
-    if (TopLeft(points[1], points[2])) {
-      ordered[0] = 0;
-      ordered[1] = 1;
-      ordered[2] = 2;
-    }
-    else {
-      if (TopLeft(points[0], points[2])) {
-        ordered[0] = 0;
-        ordered[1] = 2;
-        ordered[2] = 1;
-      }
-      else {
-        ordered[0] = 2;
-        ordered[1] = 0;
-        ordered[2] = 1;
-      }
-    }
+  if (TopLeft(points[ordered[1]], points[ordered[0]])) {
+    temp = ordered[1];
+    ordered[1] = ordered[0];
+    ordered[0] = temp;
   }
-  else {
-    if (TopLeft(points[1], points[2])) {
-      if (TopLeft(points[0], points[2])) {
-        ordered[0] = 1;
-        ordered[1] = 0;
-        ordered[2] = 2;
-      }
-      else {
-        ordered[0] = 1;
-        ordered[1] = 2; 
-        ordered[2] = 0;
-      }
-    }
-    else {
-      ordered[0] = 2;
-      ordered[1] = 1;
-      ordered[2] = 0;
-    }
+
+  if (TopLeft(points[ordered[2]], points[ordered[1]])) {
+    temp = ordered[2];
+    ordered[2] = ordered[1];
+    ordered[1] = temp;
+  }
+
+  if (TopLeft(points[ordered[1]], points[ordered[0]])) {
+    temp = ordered[1];
+    ordered[1] = ordered[0];
+    ordered[0] = temp;
   }
 
   /* init long edge 
    * if it returns 1 that means the tri is 0 in length, so don't bother */
   if (InitEdge(&longEdge, indicies[ordered[0]], indicies[ordered[2]])) return;
 
-  y = points[ordered[0]].y;
+/* DRAW_TRI_UPPER_HALF */
+  leftEdge = &shortEdge;
+  rightEdge = &longEdge;
 
   if (InitEdge(&shortEdge, indicies[ordered[0]], indicies[ordered[1]])) goto DRAW_TRI_LOWER_HALF;
 
-  for (i = 0 ; i < shortEdge.Height ; i++, y++) {
-    if (y >= SCREEN_HEIGHT) return;
-    if (y >= 0) {
-      DrawScanline(y, &longEdge, &shortEdge);
-    }
+  if (shortEdge.Height * longEdge.Width < shortEdge.Width * longEdge.Height) {
+    leftEdge = &longEdge;
+    rightEdge = &shortEdge;
+  }
 
-    StepEdge(&shortEdge);
-    StepEdge(&longEdge);
+  for (y = points[ordered[0]].y ; y < points[ordered[1]].y ; y++) {
+    if (y >= SCREEN_HEIGHT) return;
+    if (y >= 0) DrawScanlineSlow(y, leftEdge, rightEdge);
+
+    StepEdge(leftEdge);
+    StepEdge(rightEdge);
   }
 
 DRAW_TRI_LOWER_HALF:
+  if (shortEdge.Height <= 0) {
+    if (0 < shortEdge.Width * longEdge.Height) {
+      leftEdge = &longEdge;
+      rightEdge = &shortEdge;
+    }
+  }
+
   if (InitEdge(&shortEdge, indicies[ordered[1]], indicies[ordered[2]])) return;
 
-  for (i = 0 ; i < shortEdge.Height ; i++, y++) {
+  for (y = points[ordered[1]].y ; y < points[ordered[2]].y ; y++) {
     if (y >= SCREEN_HEIGHT) return;
-    if (y >= 0) {
-      DrawScanline(y, &longEdge, &shortEdge);
-    }
+    if (y >= 0) DrawScanlineSlow(y, leftEdge, rightEdge);
 
-    StepEdge(&shortEdge);
-    StepEdge(&longEdge);
+    StepEdge(leftEdge);
+    StepEdge(rightEdge);
   }
 }
 
 void RenderTriVerts(unsigned short* indicies) {
+  point_t points[3];
   point_t p;
   int i;
 
-  for (i = 0 ; i < 3 ; i++, indicies++) {
-    if (Verts.projected[*indicies].z <= 0) continue;
+  int v1, w1, v2, w2;
 
+  if (Verts.projected[indicies[0]].z <= 1) return;
+  if (Verts.projected[indicies[1]].z <= 1) return;
+  if (Verts.projected[indicies[2]].z <= 1) return;
+
+  points[0] = Verts.screen[indicies[0]];
+  points[1] = Verts.screen[indicies[1]];
+  points[2] = Verts.screen[indicies[2]];
+
+  v1 = points[1].x - points[0].x;
+  w1 = points[2].x - points[0].x;
+  v2 = points[1].y - points[0].y;
+  w2 = points[2].y - points[0].y;
+
+  if ((v1 * w2 - v2 * w1) > 0) return;
+
+  for (i = 0 ; i < 3 ; i++, indicies++) {
     p = Verts.screen[*indicies];
     if (p.y < 0) continue;
     if (p.x < 0) continue; 
     if (p.y >= 200) continue; 
     if (p.x >= 320) continue;
-    BackBuffer[p.y * 320 + p.x] = 3;
+    BackBuffer[p.y * 320 + p.x] = i+3;
   }
 }
 

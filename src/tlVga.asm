@@ -110,4 +110,14 @@ DRAW_DEPTH_LOOP:
   ret
 DrawDepth_ endp
 
+; void DrawScanline(int y, _edge* leftEdge, _edge* rightEdge);
+; inputs:
+;   eax -> y 
+;   edx -> longEdge 
+;   ebx -> shortEdge
+public DrawScanline_
+DrawScanline_ proc near 
+
+DrawScanline_ endp
+
   end
