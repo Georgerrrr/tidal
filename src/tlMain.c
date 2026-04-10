@@ -39,51 +39,23 @@ static void CloseMemory(void) {
 
 static void Mainloop(void) {
   float move = .1f;
+  int f;
 
+  f = 0;
   while (1) {
     if (kbhit()) {
       switch (getch()) {
         case 0x1B: goto EXIT_MAINLOOP;
-        case 'x':
+        case ' ':
         {
-          gfxAppendRotationX(GFX_MODEL_MATRIX, 0.1);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 'y':
-        {
-          gfxAppendRotationY(GFX_MODEL_MATRIX, 0.1);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 'z':
-        {
-          gfxAppendRotationZ(GFX_MODEL_MATRIX, 0.1);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 0x4b:
-        {
-          testObj.x -= move;
-          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 0x48:
-        {
-          testObj.z -= move;
-          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 0x4d:
-        {
-          testObj.x += move;
-          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
-          gfxUpdateMatrix(GFX_MODEL);
-        } break;
-        case 0x50:
-        {
-          testObj.z += move;
-          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
-          gfxUpdateMatrix(GFX_MODEL);
+          f = !f;
         } break;
       }
+    }
+
+    if (f) {
+      gfxAppendRotationY(GFX_MODEL_MATRIX, move);
+      gfxUpdateMatrix(GFX_MODEL);
     }
 
     gfxClear();
