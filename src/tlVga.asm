@@ -76,4 +76,38 @@ CopyBuffer_ proc near
   ret
 CopyBuffer_ endp
 
+; void DrawDepth(unsigned char* to, unsigned short* from, int length);
+; inputs:
+;   eax -> to 
+;   edx -> from 
+;   ebx -> length
+
+public DrawDepth_
+DrawDepth_ proc near 
+  push ebp 
+  mov  ebp, esp
+
+  push esi 
+  push edi 
+
+  mov  esi, edx 
+  mov  edi, eax
+
+  mov  ecx, ebx
+
+  inc  esi
+
+DRAW_DEPTH_LOOP:
+  movsb
+  inc  esi 
+  dec  ecx 
+  jnz  DRAW_DEPTH_LOOP
+
+  pop  edi 
+  pop  esi
+
+  pop  ebp
+  ret
+DrawDepth_ endp
+
   end

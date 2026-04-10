@@ -43,6 +43,7 @@ static fvec2_t* Uvs;
 void SetVideoMode(int mode);
 void FillBuffer(void* buffer, int length);
 void CopyBuffer(void* to, void* from, int length);
+void DrawDepth(unsigned char* to, unsigned short* from, int length);
 
 void gfxInit(void) {
   SCREEN_SEG = (unsigned char*)(0xA000 << 4);
