@@ -507,7 +507,7 @@ void RenderTriVerts(unsigned short* indicies) {
   }
 }
 
-void gfxDrawModel(void) {
+void gfxDrawModel() {
   unsigned short *index;
   unsigned int i;
   unsigned int step;
@@ -515,6 +515,7 @@ void gfxDrawModel(void) {
   void (*RenderFunc)(unsigned short*);
 
   RenderFunc = RenderTri;
+
   step       = 3;
 
   for (i = 0, index = Indicies; i < IndiciesLen ; i += step, index += step) {

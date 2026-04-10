@@ -1,4 +1,3 @@
-#include <stdint.h>
 #include <string.h>
 
 #include "include/tlAssert.h"

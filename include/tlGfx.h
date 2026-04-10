@@ -1,9 +1,6 @@
 #ifndef TL_GFX_H
 #define TL_GFX_H 
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "include/tlBitmap.h"
 #include "include/tlMaths.h"
 
@@ -48,7 +45,7 @@ void gfxLoadUVs(fvec2_t* uvs);
 void gfxLoadVerts(fvec4_t* verts, unsigned int length);
 void gfxLoadIndicies(unsigned short* indicies, unsigned int length);
 
-void gfxDrawModel(void);
+void gfxDrawModel();
 void gfxFlip(void);
 
 #endif // TL_GFX_H
