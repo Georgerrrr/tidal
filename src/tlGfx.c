@@ -472,7 +472,7 @@ static void RenderTri(unsigned short* indicies) {
 
   for (y = points[ordered[0]].y ; y < points[ordered[1]].y ; y++) {
     if (y >= SCREEN_HEIGHT) return;
-    if (y >= 0) DrawScanlineSlow(y, leftEdge, rightEdge);
+    if (y >= 0) DrawScanline(BackBuffer, DepthBuffer, leftEdge, rightEdge, y, Texture.data, Texture.width, Texture.height);
 
     StepEdge(leftEdge);
     StepEdge(rightEdge);
@@ -490,7 +490,7 @@ DRAW_TRI_LOWER_HALF:
 
   for (y = points[ordered[1]].y ; y < points[ordered[2]].y ; y++) {
     if (y >= SCREEN_HEIGHT) return;
-    if (y >= 0) DrawScanlineSlow(y, leftEdge, rightEdge);
+    if (y >= 0) DrawScanline(BackBuffer, DepthBuffer, leftEdge, rightEdge, y, Texture.data, Texture.width, Texture.height);
 
     StepEdge(leftEdge);
     StepEdge(rightEdge);
