@@ -38,7 +38,7 @@ static void CloseMemory(void) {
 }
 
 static void Mainloop(void) {
-  float move = .1f;
+  float move = .01f;
   int f;
 
   f = 0;
@@ -50,11 +50,25 @@ static void Mainloop(void) {
         {
           f = !f;
         } break;
+        case 'x':
+        {
+          testObj.x -= 1;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
+        case 'z':
+        {
+          testObj.z -= 1;
+          gfxSetTransformPosition(GFX_MODEL_MATRIX, testObj.x, testObj.y, testObj.z);
+          gfxUpdateMatrix(GFX_MODEL);
+        } break;
       }
     }
 
     if (f) {
+      gfxAppendRotationX(GFX_MODEL_MATRIX, move);
       gfxAppendRotationY(GFX_MODEL_MATRIX, move);
+      gfxAppendRotationZ(GFX_MODEL_MATRIX, move);
       gfxUpdateMatrix(GFX_MODEL);
     }
 
