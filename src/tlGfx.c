@@ -18,6 +18,26 @@ typedef struct {
   unsigned int length;
 } _verts;
 
+/* there's a mirror of this struct in tlVga.asm, if this gets updated 
+ * remember to update it in there too! */
+typedef struct {
+  int DestX,
+      Width,
+      Height;
+
+  int Step,
+      Direction,
+      Err,
+      AdjUp,
+      AdjDown;
+
+  fvec2_t uv;
+  fvec2_t uvStep;
+
+  float ZI;
+  float ZIStep;
+} _edge;
+
 static unsigned char* SCREEN_SEG;
 
 static unsigned char*  BackBuffer;
@@ -43,6 +63,10 @@ void SetVideoMode(int mode);
 void FillBuffer(void* buffer, int length);
 void CopyBuffer(void* to, void* from, int length);
 void DrawDepth(unsigned char* to, unsigned short* from, int length);
+
+void DrawScanline(unsigned char* drawBuffer, unsigned short* depthBuffer,
+                  _edge* leftEdge, _edge* rightEdge, int y,
+                  unsigned char* texPtr, unsigned short texWidth, unsigned short texHeight);
 
 void gfxInit(void) {
   SCREEN_SEG = (unsigned char*)(0xA000 << 4);
@@ -257,24 +281,6 @@ void gfxLoadIndicies(unsigned short* indicies, unsigned int length) {
   IndiciesLen = length;
 }
 
-typedef struct {
-  int DestX,
-      Width,
-      Height;
-
-  int Step,
-      Direction,
-      Err,
-      AdjUp,
-      AdjDown;
-
-  fvec2_t uv;
-  fvec2_t uvStep;
-
-  float ZI;
-  float ZIStep;
-} _edge;
-
 static int TopLeft(point_t a, point_t b) {
   return ((a.y < b.y) || (a.y == b.y && a.x < b.x));
 }
@@ -328,11 +334,16 @@ static void StepEdge(_edge* edge) {
   }
 }
 
-static void DrawScanlineSlow(int y, _edge* leftEdge, _edge* rightEdge) {
+static void DrawScanlineSlow(unsigned char* drawBuffer, unsigned short* depthBuffer,
+                            _edge* leftEdge, _edge* rightEdge, int y,
+                            unsigned char* texPtr, unsigned short texWidth, unsigned short texHeight)
+{
   int i;
   unsigned char* writePtr;
   unsigned char* readPtr;
   unsigned short* depthPtr;
+
+  unsigned short outZ;
 
   fvec2_t uv;
   fvec2_t uvStep;
@@ -360,26 +371,27 @@ static void DrawScanlineSlow(int y, _edge* leftEdge, _edge* rightEdge) {
   if (startX < 0) {
     uv.x += (uvStep.x * (-startX));
     uv.y += (uvStep.y * (-startX));
+    zi   += (ziStep   * (-startX));
     startX = 0;
   }
   if (endX > SCREEN_WIDTH) endX = SCREEN_WIDTH;
 
-  readPtr = Texture.data; 
-  writePtr = BackBuffer + (y * SCREEN_WIDTH + startX);
-  depthPtr = DepthBuffer + (y * SCREEN_WIDTH + startX);
+  readPtr = texPtr;
+
+  writePtr = drawBuffer + (y * SCREEN_WIDTH + startX);
+  depthPtr = depthBuffer + (y * SCREEN_WIDTH + startX);
 
   for (i = startX ; i < endX ; i++, writePtr++, depthPtr++, uv.x += uvStep.x, uv.y += uvStep.y, zi += ziStep) {
     int x, y;
-    unsigned short z;
 
-    z = (unsigned short)(zi * 0xffff);
+    outZ = (unsigned short)(zi * 0xffff);
 
-    if (*depthPtr > z) continue;
-    *depthPtr = z;
+    if (*depthPtr > outZ) continue;
+    *depthPtr = outZ;
 
-    x = (int)((float)((uv.x * (Texture.width-1)) + 0.5f)); 
-    y = (int)((float)((uv.y * (Texture.height-1)) + 0.5f)); 
-    *writePtr = readPtr[y * Texture.width + x];
+    x = (int)((float)((uv.x * (texWidth-1)) + 0.5f)); 
+    y = (int)((float)((uv.y * (texHeight-1)) + 0.5f)); 
+    *writePtr = readPtr[y * texWidth + x];
   }
 }
 
